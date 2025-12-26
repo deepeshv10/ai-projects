@@ -6,4 +6,4 @@ This single file project helps in basic understanding of LLM calling from Python
 
 For running this code locally, 
  - create .env in your directory -> paste your Openai API key in .env file as below :
- OPENAI_API_KEY=<your key here>
+ OPENAI_API_KEY=your key here
