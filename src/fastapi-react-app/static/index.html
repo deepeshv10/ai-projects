@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee File DB</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script type="text/babel">
+    const API_BASE = "/api";
+    const emptyForm = { name: "", role: "", department: "", email: "" };
+
+    const Field = ({ label, name, value, onChange, required = false, type = "text" }) => (
+      <label className="field">
+        <span>{label}{required ? " *" : ""}</span>
+        <input
+          type={type}
+          name={name}
+          value={value}
+          onChange={onChange}
+          required={required}
+        />
+      </label>
+    );
+
+    function App() {
+      const [form, setForm] = React.useState(emptyForm);
+      const [employees, setEmployees] = React.useState([]);
+      const [loading, setLoading] = React.useState(false);
+      const [message, setMessage] = React.useState("");
+      const [error, setError] = React.useState("");
+      const [editingId, setEditingId] = React.useState(null);
+
+      const handleChange = (event) => {
+        const { name, value } = event.target;
+        setForm((prev) => ({ ...prev, [name]: value }));
+      };
+
+      const loadEmployees = async () => {
+        setLoading(true);
+        setMessage("");
+        setError("");
+        try {
+          const res = await fetch(`${API_BASE}/employees`);
+          if (!res.ok) throw new Error("Failed to load data");
+          const data = await res.json();
+          setEmployees(data);
+        } catch (err) {
+          setError(err.message || "Could not load employees");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      React.useEffect(() => {
+        loadEmployees();
+      }, []);
+
+      const handleSubmit = async (event) => {
+        event.preventDefault();
+        if (!form.name.trim() || !form.role.trim() || !form.department.trim()) {
+          setError("Name, Role, and Department are required.");
+          return;
+        }
+
+        setLoading(true);
+        setMessage("");
+        setError("");
+
+        const payload = {
+          name: form.name.trim(),
+          role: form.role.trim(),
+          department: form.department.trim(),
+          email: form.email.trim() || null,
+        };
+
+        try {
+          const method = editingId ? "PUT" : "POST";
+          const url = editingId
+            ? `${API_BASE}/employees/${editingId}`
+            : `${API_BASE}/employees`;
+
+          const res = await fetch(url, {
+            method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) {
+            const detail = await res.json().catch(() => ({}));
+            throw new Error(detail.detail || "Request failed");
+          }
+
+          setMessage(editingId ? "Employee updated." : "Employee created.");
+          setEditingId(null);
+          setForm(emptyForm);
+          await loadEmployees();
+        } catch (err) {
+          setError(err.message || "Something went wrong.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const startEdit = (employee) => {
+        setEditingId(employee.id);
+        setForm({
+          name: employee.name || "",
+          role: employee.role || "",
+          department: employee.department || "",
+          email: employee.email || "",
+        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      };
+
+      const cancelEdit = () => {
+        setEditingId(null);
+        setForm(emptyForm);
+        setMessage("");
+        setError("");
+      };
+
+      const deleteEmployee = async (employeeId) => {
+        const confirmDelete = window.confirm("Delete this employee?");
+        if (!confirmDelete) return;
+        setLoading(true);
+        setMessage("");
+        setError("");
+        try {
+          const res = await fetch(`${API_BASE}/employees/${employeeId}`, { method: "DELETE" });
+          if (!res.ok) throw new Error("Delete failed");
+          setMessage("Employee deleted.");
+          await loadEmployees();
+          if (editingId === employeeId) cancelEdit();
+        } catch (err) {
+          setError(err.message || "Could not delete employee.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div className="page">
+          <header className="header">
+            <div>
+              <h1>Employee File DB</h1>
+              <p>Simple one-pager using FastAPI + React + JSON file storage.</p>
+            </div>
+            <div className="actions">
+              <button onClick={loadEmployees} disabled={loading}>
+                {loading ? "Loading..." : "Refresh"}
+              </button>
+              {editingId && (
+                <button className="secondary" onClick={cancelEdit} disabled={loading}>
+                  Cancel edit
+                </button>
+              )}
+            </div>
+          </header>
+
+          <section className="card">
+            <h2>{editingId ? "Update employee" : "Add new employee"}</h2>
+            <form className="form" onSubmit={handleSubmit}>
+              <div className="form-grid">
+                <Field label="Name" name="name" required value={form.name} onChange={handleChange} />
+                <Field label="Role" name="role" required value={form.role} onChange={handleChange} />
+                <Field
+                  label="Department"
+                  name="department"
+                  required
+                  value={form.department}
+                  onChange={handleChange}
+                />
+                <Field
+                  label="Email"
+                  name="email"
+                  type="email"
+                  value={form.email}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="form-actions">
+                <button type="submit" disabled={loading}>
+                  {editingId ? "Save changes" : "Create"}
+                </button>
+                {editingId && (
+                  <button type="button" className="secondary" onClick={cancelEdit} disabled={loading}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+            <div className="status" aria-live="polite">
+              {message && <span className="success">{message}</span>}
+              {error && <span className="error">{error}</span>}
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="list-header">
+              <h2>Employees</h2>
+              <span className="count">{employees.length} total</span>
+            </div>
+            {employees.length === 0 ? (
+              <p className="muted">No employees yet. Add your first entry above.</p>
+            ) : (
+              <div className="table">
+                <div className="table-head">
+                  <span>ID</span>
+                  <span>Name</span>
+                  <span>Role</span>
+                  <span>Department</span>
+                  <span>Email</span>
+                  <span>Actions</span>
+                </div>
+                {employees.map((emp) => (
+                  <div className="table-row" key={emp.id}>
+                    <span>{emp.id}</span>
+                    <span>{emp.name}</span>
+                    <span>{emp.role}</span>
+                    <span>{emp.department}</span>
+                    <span>{emp.email || "—"}</span>
+                    <span className="row-actions">
+                      <button onClick={() => startEdit(emp)} disabled={loading}>
+                        Edit
+                      </button>
+                      <button className="secondary" onClick={() => deleteEmployee(emp.id)} disabled={loading}>
+                        Delete
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+  </script>
+</body>
+</html>
+
